@@ -19,8 +19,16 @@ export interface MultimodalEmbeddingResponse {
   request_id: string;
 }
 
-const DASHSCOPE_MULTIMODAL_API =
-  "https://dashscope.aliyuncs.com/api/v1/services/embeddings/multimodal-embedding/multimodal-embedding";
+function getMultimodalApiUrl(): string {
+  const config = getConfig();
+  const baseUrl = config.dashscope.baseUrl || "https://dashscope.aliyuncs.com/api/v1";
+  return `${baseUrl}/services/embeddings/multimodal-embedding/multimodal-embedding`;
+}
+
+function getDefaultModel(): string {
+  const config = getConfig();
+  return config.dashscope.model || "qwen3-vl-embedding";
+}
 
 export async function getTextEmbedding(
   text: string,
@@ -35,7 +43,9 @@ export async function getTextEmbedding(
     throw new Error("DASHSCOPE_API_KEY 未配置");
   }
 
-  const { model = "qwen3-vl-embedding", dimension = 1024 } = options;
+  const model = options.model || getDefaultModel();
+  const dimension = options.dimension || 1024;
+  const apiUrl = getMultimodalApiUrl();
 
   const requestBody = {
     model,
@@ -49,7 +59,7 @@ export async function getTextEmbedding(
 
   try {
     const response = await axios.post<MultimodalEmbeddingResponse>(
-      DASHSCOPE_MULTIMODAL_API,
+      apiUrl,
       requestBody,
       {
         headers: {
@@ -88,7 +98,9 @@ export async function getImageEmbedding(
     throw new Error("DASHSCOPE_API_KEY 未配置");
   }
 
-  const { model = "qwen3-vl-embedding", dimension = 1024 } = options;
+  const model = options.model || getDefaultModel();
+  const dimension = options.dimension || 1024;
+  const apiUrl = getMultimodalApiUrl();
 
   const requestBody = {
     model,
@@ -102,7 +114,7 @@ export async function getImageEmbedding(
 
   try {
     const response = await axios.post<MultimodalEmbeddingResponse>(
-      DASHSCOPE_MULTIMODAL_API,
+      apiUrl,
       requestBody,
       {
         headers: {
@@ -136,7 +148,9 @@ export async function batchGetImageEmbeddings(
     batchSize?: number;
   } = {}
 ): Promise<Map<string, number[]>> {
-  const { batchSize = 5, model = "qwen3-vl-embedding", dimension = 1024 } = options;
+  const model = options.model || getDefaultModel();
+  const batchSize = options.batchSize || 5;
+  const dimension = options.dimension || 1024;
   const results = new Map<string, number[]>();
 
   const batches: string[][] = [];
@@ -180,11 +194,9 @@ export async function calculateImageSimilarities(
     similarityThreshold?: number;
   } = {}
 ): Promise<ImageSimilarityResult[]> {
-  const {
-    model = "qwen3-vl-embedding",
-    dimension = 1024,
-    similarityThreshold = 0.5,
-  } = options;
+  const model = options.model || getDefaultModel();
+  const dimension = options.dimension || 1024;
+  const similarityThreshold = options.similarityThreshold || 0.5;
 
   const queryEmbedding = await getTextEmbedding(queryText, { model, dimension });
 
