@@ -6,9 +6,13 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { MasonryGrid } from "@/components/masonry-grid";
 import { LoadingState } from "@/components/loading-state";
 import { EmptyState, NoResultsState } from "@/components/empty-state";
-import { ErrorState, ConfigErrorState } from "@/components/error-state";
+import {
+  ErrorState,
+  ConfigErrorState,
+  SimilarityErrorState,
+} from "@/components/error-state";
 import { ImageResult, cn } from "@/lib/utils";
-import { Sparkles, Download, Info, ExternalLink } from "lucide-react";
+import { Sparkles, Download, Info, ExternalLink, AlertTriangle } from "lucide-react";
 
 export interface SearchResponse {
   query: string;
@@ -32,6 +36,12 @@ type AppState =
   | { status: "idle" }
   | { status: "loading" }
   | { status: "success"; data: SearchResponse }
+  | {
+      status: "similarity-error";
+      error: string;
+      rawImages: ImageResult[];
+      showRawImages: boolean;
+    }
   | { status: "error"; error: string; missing?: string[] }
   | { status: "no-results"; query: string };
 
@@ -60,6 +70,16 @@ export default function Home() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
+
+        if (response.status === 500 && errorData.errorType === "similarity") {
+          setState({
+            status: "similarity-error",
+            error: errorData.message || "AI 相似度筛选失败",
+            rawImages: errorData.rawImages || [],
+            showRawImages: false,
+          });
+          return;
+        }
 
         if (response.status === 500 && errorData.missing) {
           setState({
@@ -91,6 +111,21 @@ export default function Home() {
       });
     }
   }, []);
+
+  const handleShowRawImages = React.useCallback(() => {
+    if (state.status === "similarity-error") {
+      setState({
+        ...state,
+        showRawImages: true,
+      });
+    }
+  }, [state]);
+
+  const handleRetry = React.useCallback(() => {
+    if (lastQuery) {
+      handleSearch(lastQuery);
+    }
+  }, [lastQuery, handleSearch]);
 
   const handleDownload = React.useCallback(async (image: ImageResult) => {
     try {
@@ -124,11 +159,12 @@ export default function Home() {
     }
   }, []);
 
-  const handleRetry = React.useCallback(() => {
-    if (lastQuery) {
-      handleSearch(lastQuery);
+  const getRawImagesForDisplay = React.useMemo(() => {
+    if (state.status === "similarity-error" && state.showRawImages) {
+      return state.rawImages.slice(0, 10);
     }
-  }, [lastQuery, handleSearch]);
+    return [];
+  }, [state]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -184,8 +220,9 @@ export default function Home() {
             isLoading={state.status === "loading"}
           />
 
-          {(state.status === "success" ||
-            state.status === "no-results") && (
+          {((state.status === "success" ||
+            state.status === "no-results" ||
+            (state.status === "similarity-error" && state.showRawImages)) && (
             <div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
               <div className="flex items-center gap-2">
                 <span>搜索</span>
@@ -199,6 +236,12 @@ export default function Home() {
                       {state.data.totalResults}
                     </span>{" "}
                     张图片
+                  </span>
+                )}
+                {state.status === "similarity-error" && state.showRawImages && (
+                  <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
+                    <AlertTriangle className="h-3 w-3" />
+                    · 显示未经 AI 筛选的原始结果
                   </span>
                 )}
               </div>
@@ -215,7 +258,7 @@ export default function Home() {
                 </div>
               )}
             </div>
-          )}
+          ))}
         </div>
 
         <div className="min-h-[400px]">
@@ -225,6 +268,42 @@ export default function Home() {
 
           {state.status === "success" && (
             <MasonryGrid images={state.data.images} onDownload={handleDownload} />
+          )}
+
+          {state.status === "similarity-error" && !state.showRawImages && (
+            <SimilarityErrorState
+              message={state.error}
+              rawImagesCount={state.rawImages.length}
+              onRetry={handleRetry}
+              onShowRawImages={handleShowRawImages}
+            />
+          )}
+
+          {state.status === "similarity-error" && state.showRawImages && (
+            <div>
+              <div className="mb-6 p-4 rounded-lg bg-amber-500/5 border border-amber-500/20">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-sm text-amber-600 dark:text-amber-400 font-medium">
+                      ⚠️ 当前显示的是未经 AI 智能筛选的原始结果
+                    </p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      多模态 Embedding 服务暂时不可用，这些结果可能包含不相关的图片。
+                    </p>
+                    <div className="flex gap-3 mt-3">
+                      <button
+                        onClick={handleRetry}
+                        className="text-sm font-medium text-primary hover:underline"
+                      >
+                        重试 AI 筛选
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <MasonryGrid images={getRawImagesForDisplay} onDownload={handleDownload} />
+            </div>
           )}
 
           {state.status === "no-results" && (
@@ -247,7 +326,7 @@ export default function Home() {
         </div>
       </main>
 
-      <footer className="border-t border-border/50 bg-background/80 backdrop-blur-xl">
+      <footer className="border-t border-border/50 bg-background/80 backdrop-blur-xl mt-auto">
         <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
           <div className="flex flex-col items-center justify-between gap-4 sm:flex-row">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">

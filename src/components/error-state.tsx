@@ -1,8 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { AlertTriangle, RefreshCw } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { AlertTriangle, RefreshCw, Eye, Brain, Info } from "lucide-react";
+import { cn, ImageResult } from "@/lib/utils";
 
 interface ErrorStateProps {
   title?: string;
@@ -82,6 +82,118 @@ export function ErrorState({
           重试
         </button>
       )}
+    </div>
+  );
+}
+
+interface SimilarityErrorStateProps {
+  message: string;
+  rawImagesCount: number;
+  onRetry: () => void;
+  onShowRawImages: () => void;
+}
+
+export function SimilarityErrorState({
+  message,
+  rawImagesCount,
+  onRetry,
+  onShowRawImages,
+}: SimilarityErrorStateProps) {
+  const [showDetails, setShowDetails] = React.useState(false);
+
+  return (
+    <div className="flex flex-col items-center justify-center py-12">
+      <div className="relative">
+        <div className="absolute -inset-4 rounded-full bg-amber-500/10 blur-xl opacity-50" />
+        <div className="relative flex h-20 w-20 items-center justify-center rounded-full bg-amber-500/10">
+          <Brain className="h-8 w-8 text-amber-500" />
+        </div>
+      </div>
+
+      <div className="mt-6 text-center space-y-3 max-w-lg">
+        <h3 className="text-xl font-semibold text-foreground">
+          AI 智能筛选暂时不可用
+        </h3>
+
+        <div className="flex items-start gap-3 p-4 rounded-lg bg-amber-500/5 border border-amber-500/20">
+          <Info className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+          <div className="text-left">
+            <p className="text-sm text-amber-600 dark:text-amber-400">
+              多模态 Embedding 服务暂时无法访问，导致图片相似度筛选功能不可用。
+            </p>
+          </div>
+        </div>
+
+        <p className="text-sm text-muted-foreground">
+          当前已从 Pexels 和 Unsplash 搜索到{" "}
+          <span className="font-medium text-foreground">{rawImagesCount}</span> 张图片，
+          但缺少 AI 智能筛选可能会包含不相关的结果。
+        </p>
+
+        {message && (
+          <div className="mt-2">
+            <button
+              onClick={() => setShowDetails(!showDetails)}
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {showDetails ? "隐藏技术细节" : "查看技术细节"}
+            </button>
+
+            {showDetails && (
+              <div className="mt-2 p-3 rounded-lg bg-muted/50 border border-border">
+                <p className="text-xs font-mono text-muted-foreground break-all">
+                  {message}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
+          <button
+            onClick={onRetry}
+            className={cn(
+              "flex items-center gap-2",
+              "px-6 py-2.5",
+              "rounded-lg",
+              "bg-primary",
+              "text-primary-foreground",
+              "text-sm font-medium",
+              "transition-all",
+              "hover:bg-primary/90",
+              "active:scale-[0.98]",
+              "focus-ring"
+            )}
+          >
+            <RefreshCw className="h-4 w-4" />
+            重试 AI 筛选
+          </button>
+
+          <button
+            onClick={onShowRawImages}
+            className={cn(
+              "flex items-center gap-2",
+              "px-6 py-2.5",
+              "rounded-lg",
+              "bg-muted",
+              "text-foreground",
+              "text-sm font-medium",
+              "transition-all",
+              "hover:bg-muted/80",
+              "active:scale-[0.98]",
+              "focus-ring",
+              "border border-border"
+            )}
+          >
+            <Eye className="h-4 w-4" />
+            查看原始结果（无 AI 筛选）
+          </button>
+        </div>
+
+        <p className="text-xs text-muted-foreground/70 mt-4">
+          💡 建议检查您的阿里云百炼 API 配置是否正确，或稍后再试。
+        </p>
+      </div>
     </div>
   );
 }
