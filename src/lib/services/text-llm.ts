@@ -10,31 +10,32 @@ export interface ParsedQuery {
   enhancedDescription: string;
 }
 
-const SYSTEM_PROMPT = `你是一个专业的图片搜索助手。用户会用自然语言描述他们想要的图片，你需要分析并生成更适合图片搜索引擎的关键词。
-
-请分析用户的查询并返回以下信息（JSON格式）：
-- searchKeywords: 一组适合搜索的关键词短语（3-5个）
-- colorPreferences: 用户可能喜欢的颜色（如果有提到）
-- stylePreferences: 用户提到的风格类型（如极简、复古、现代等）
-- orientation: 图片方向（landscape横向, portrait纵向, square方形，如果没有指定则不返回）
-- enhancedDescription: 优化后的图片描述，更适合多模态embedding模型理解
-
-重要规则：
-1. 直接输出JSON，不要输出任何思考过程、解释或额外文字
-2. 不要使用markdown代码块标记（```json 或 ```）
-3. 直接输出JSON对象本身
-4. 如果用户用中文，请用中文关键词
-5. 保持简洁，避免冗余
-6. 不要添加用户没有提到的信息
-
-示例输出：
-{
-  "searchKeywords": ["阳光明媚的海滩", "热带海岛风景", "白色沙滩", "蓝色海水", "度假胜地"],
-  "colorPreferences": ["蓝色", "白色", "绿色"],
-  "stylePreferences": ["自然风景"],
-  "orientation": "landscape",
-  "enhancedDescription": "阳光明媚的热带海滩，白色的沙滩，清澈的蓝色海水，棕榈树，度假胜地"
-}`;
+function getSystemPrompt(): string {
+  return (
+    "你是一个专业的图片搜索助手。用户会用自然语言描述他们想要的图片，你需要分析并生成更适合图片搜索引擎的关键词。\n\n" +
+    "请分析用户的查询并返回以下信息（JSON格式）：\n" +
+    "- searchKeywords: 一组适合搜索的关键词短语（3-5个）\n" +
+    "- colorPreferences: 用户可能喜欢的颜色（如果有提到）\n" +
+    "- stylePreferences: 用户提到的风格类型（如极简、复古、现代等）\n" +
+    "- orientation: 图片方向（landscape横向, portrait纵向, square方形，如果没有指定则不返回）\n" +
+    "- enhancedDescription: 优化后的图片描述，更适合多模态embedding模型理解\n\n" +
+    "重要规则：\n" +
+    "1. 直接输出JSON，不要输出任何思考过程、解释或额外文字\n" +
+    "2. 不要使用markdown代码块标记，不要包裹任何额外内容\n" +
+    "3. 直接输出JSON对象本身\n" +
+    "4. 如果用户用中文，请用中文关键词\n" +
+    "5. 保持简洁，避免冗余\n" +
+    "6. 不要添加用户没有提到的信息\n\n" +
+    '示例输出：\n' +
+    '{\n' +
+    '  "searchKeywords": ["阳光明媚的海滩", "热带海岛风景", "白色沙滩", "蓝色海水", "度假胜地"],\n' +
+    '  "colorPreferences": ["蓝色", "白色", "绿色"],\n' +
+    '  "stylePreferences": ["自然风景"],\n' +
+    '  "orientation": "landscape",\n' +
+    '  "enhancedDescription": "阳光明媚的热带海滩，白色的沙滩，清澈的蓝色海水，棕榈树，度假胜地"\n' +
+    '}'
+  );
+}
 
 function extractJsonFromContent(content: string): string {
   let jsonStr = content.trim();
@@ -77,7 +78,7 @@ export async function parseUserQuery(query: string): Promise<ParsedQuery> {
     messages: [
       {
         role: "system",
-        content: SYSTEM_PROMPT,
+        content: getSystemPrompt(),
       },
       {
         role: "user",
