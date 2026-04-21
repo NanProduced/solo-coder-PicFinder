@@ -19,11 +19,13 @@ const SYSTEM_PROMPT = `你是一个专业的图片搜索助手。用户会用自
 - orientation: 图片方向（landscape横向, portrait纵向, square方形，如果没有指定则不返回）
 - enhancedDescription: 优化后的图片描述，更适合多模态embedding模型理解
 
-注意：
-1. 关键词要具体且适合图片搜索
-2. 如果用户用中文，请用中文关键词
-3. 保持简洁，避免冗余
-4. 不要添加用户没有提到的信息
+重要规则：
+1. 直接输出JSON，不要输出任何思考过程、解释或额外文字
+2. 不要使用markdown代码块标记（```json 或 ```）
+3. 直接输出JSON对象本身
+4. 如果用户用中文，请用中文关键词
+5. 保持简洁，避免冗余
+6. 不要添加用户没有提到的信息
 
 示例输出：
 {
@@ -33,6 +35,34 @@ const SYSTEM_PROMPT = `你是一个专业的图片搜索助手。用户会用自
   "orientation": "landscape",
   "enhancedDescription": "阳光明媚的热带海滩，白色的沙滩，清澈的蓝色海水，棕榈树，度假胜地"
 }`;
+
+function extractJsonFromContent(content: string): string {
+  let jsonStr = content.trim();
+
+  if (jsonStr.startsWith("<think>")) {
+    const thinkEndIndex = jsonStr.indexOf("</think>");
+    if (thinkEndIndex !== -1) {
+      jsonStr = jsonStr.substring(thinkEndIndex + "</think>".length).trim();
+    }
+  }
+
+  const jsonStartIndex = jsonStr.indexOf("{");
+  const jsonEndIndex = jsonStr.lastIndexOf("}");
+
+  if (jsonStartIndex !== -1 && jsonEndIndex !== -1 && jsonEndIndex > jsonStartIndex) {
+    jsonStr = jsonStr.substring(jsonStartIndex, jsonEndIndex + 1);
+  }
+
+  return jsonStr;
+}
+
+function tryParseJson(jsonStr: string): ParsedQuery | null {
+  try {
+    return JSON.parse(jsonStr) as ParsedQuery;
+  } catch {
+    return null;
+  }
+}
 
 export async function parseUserQuery(query: string): Promise<ParsedQuery> {
   const config = getConfig();
@@ -56,7 +86,7 @@ export async function parseUserQuery(query: string): Promise<ParsedQuery> {
     ],
     response_format: { type: "json_object" },
     temperature: 0.3,
-    max_tokens: 500,
+    max_tokens: 800,
   });
 
   const content = response.choices[0].message.content;
@@ -64,8 +94,14 @@ export async function parseUserQuery(query: string): Promise<ParsedQuery> {
     throw new Error("LLM返回内容为空");
   }
 
-  try {
-    const parsed = JSON.parse(content) as ParsedQuery;
+  console.log("LLM原始响应:", content);
+
+  const jsonStr = extractJsonFromContent(content);
+  console.log("提取的JSON:", jsonStr);
+
+  const parsed = tryParseJson(jsonStr);
+
+  if (parsed) {
     parsed.originalQuery = query;
 
     if (!parsed.searchKeywords || parsed.searchKeywords.length === 0) {
@@ -77,12 +113,12 @@ export async function parseUserQuery(query: string): Promise<ParsedQuery> {
     }
 
     return parsed;
-  } catch (e) {
-    console.error("解析LLM响应失败:", e);
-    return {
-      originalQuery: query,
-      searchKeywords: [query],
-      enhancedDescription: query,
-    };
   }
+
+  console.error("解析LLM响应失败，原始内容:", content);
+  return {
+    originalQuery: query,
+    searchKeywords: [query],
+    enhancedDescription: query,
+  };
 }
