@@ -2,8 +2,7 @@
 
 import * as React from "react";
 import { ImageCard } from "@/components/image-card";
-import { ImageResult } from "@/lib/utils";
-import { cn } from "@/lib/utils";
+import { ImageResult, cn } from "@/lib/utils";
 
 interface MasonryGridProps {
   images: ImageResult[];
@@ -13,6 +12,13 @@ interface MasonryGridProps {
   className?: string;
 }
 
+/**
+ * 智能瀑布流布局组件
+ * 解决单列过长问题的核心改进：
+ * 1. 预排序：将高/矮图片交错排列
+ * 2. 更准确的高度计算
+ * 3. 智能分配策略
+ */
 export function MasonryGrid({
   images,
   onDownload,
@@ -43,16 +49,13 @@ export function MasonryGrid({
   }, []);
 
   const columnImages = React.useMemo(() => {
-    const cols: ImageResult[][] = Array.from({ length: columns }, () => []);
-    const columnHeights = new Array(columns).fill(0);
-
-    for (const image of images) {
-      const shortestColumn = columnHeights.indexOf(Math.min(...columnHeights));
-      cols[shortestColumn].push(image);
-      columnHeights[shortestColumn] += image.aspectRatio || 1;
+    if (columns === 0 || images.length === 0) {
+      return [];
     }
 
-    return cols;
+    const sortedImages = sortImagesForBalancedLayout([...images], columns);
+
+    return distributeImagesOptimally(sortedImages, columns);
   }, [images, columns]);
 
   if (images.length === 0) {
@@ -88,7 +91,7 @@ export function MasonryGrid({
             >
               <ImageCard
                 image={image}
-                priority={imageIndex < 3}
+                priority={imageIndex < 2 && columnIndex === 0}
                 onDownload={onDownload}
               />
             </div>
@@ -97,4 +100,120 @@ export function MasonryGrid({
       ))}
     </div>
   );
+}
+
+/**
+ * 对图片进行排序，使布局更平衡
+ * 策略：
+ * 1. 按高度（aspectRatio）降序排列
+ * 2. 将高的图片和矮的图片交错放置
+ */
+function sortImagesForBalancedLayout(
+  images: ImageResult[],
+  columns: number
+): ImageResult[] {
+  if (images.length <= columns) {
+    return images;
+  }
+
+  const sortedByHeight = [...images].sort((a, b) => {
+    const heightA = a.aspectRatio;
+    const heightB = b.aspectRatio;
+    return heightB - heightA;
+  });
+
+  const half = Math.ceil(sortedByHeight.length / 2);
+  const tallerImages = sortedByHeight.slice(0, half);
+  const shorterImages = sortedByHeight.slice(half);
+
+  const interleaved: ImageResult[] = [];
+  for (let i = 0; i < Math.max(tallerImages.length, shorterImages.length); i++) {
+    if (i < tallerImages.length) {
+      interleaved.push(tallerImages[i]);
+    }
+    if (i < shorterImages.length) {
+      interleaved.push(shorterImages[i]);
+    }
+  }
+
+  return interleaved;
+}
+
+/**
+ * 智能分配图片到各列，使各列高度更均衡
+ * 改进：
+ * 1. 前 N 张（N = 列数）最高的图片分别放到不同列
+ * 2. 后续图片使用加权算法选择最佳列
+ */
+function distributeImagesOptimally(
+  images: ImageResult[],
+  columns: number
+): ImageResult[][] {
+  const cols: ImageResult[][] = Array.from({ length: columns }, () => []);
+  const columnHeights = new Array(columns).fill(0);
+
+  const sortedImages = [...images].sort((a, b) => b.aspectRatio - a.aspectRatio);
+
+  for (let i = 0; i < sortedImages.length; i++) {
+    const image = sortedImages[i];
+    const imageHeight = image.aspectRatio;
+
+    let targetColumn: number;
+
+    if (i < columns) {
+      targetColumn = i;
+    } else {
+      targetColumn = findBestColumnForImage(
+        columnHeights,
+        imageHeight,
+        columns
+      );
+    }
+
+    cols[targetColumn].push(image);
+    columnHeights[targetColumn] += imageHeight;
+  }
+
+  return cols;
+}
+
+/**
+ * 为图片找到最佳列
+ * 考虑因素：
+ * 1. 当前列高度（优先选择矮的列）
+ * 2. 图片高度（高图片更影响平衡）
+ * 3. 与其他列的高度差
+ */
+function findBestColumnForImage(
+  columnHeights: number[],
+  imageHeight: number,
+  columns: number
+): number {
+  const minHeight = Math.min(...columnHeights);
+  const maxHeight = Math.max(...columnHeights);
+  const heightRange = maxHeight - minHeight;
+
+  if (heightRange < 0.5) {
+    return columnHeights.indexOf(minHeight);
+  }
+
+  const scores = columnHeights.map((height, index) => {
+    const futureHeight = height + imageHeight;
+    let maxOtherHeight = -Infinity;
+
+    for (let i = 0; i < columns; i++) {
+      if (i !== index) {
+        maxOtherHeight = Math.max(maxOtherHeight, columnHeights[i]);
+      }
+    }
+
+    const penalty = Math.max(0, futureHeight - maxOtherHeight) * 2;
+    const score = height - penalty;
+
+    return { index, score, futureHeight };
+  });
+
+  scores.sort((a, b) => a.score - b.score);
+
+  return scores[0].index;
 }

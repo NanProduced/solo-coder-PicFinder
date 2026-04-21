@@ -1,8 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { searchImages, SearchOptions } from "@/lib/services/search-service";
+import { searchImages, SearchOptions, SimilarityError } from "@/lib/services/search-service";
 import { validateConfig } from "@/lib/config";
+import { ImageResult } from "@/lib/utils";
 
 export const maxDuration = 60;
+
+interface SimilarityErrorResponse {
+  error: string;
+  message: string;
+  errorType: "similarity";
+  rawImages?: ImageResult[];
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -44,6 +52,16 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error("Search API error:", error);
+
+    if (error instanceof SimilarityError) {
+      const response: SimilarityErrorResponse = {
+        error: "Similarity calculation failed",
+        message: error.message,
+        errorType: "similarity",
+        rawImages: error.rawImages,
+      };
+      return NextResponse.json(response, { status: 500 });
+    }
 
     const errorMessage =
       error instanceof Error ? error.message : "An unexpected error occurred";
